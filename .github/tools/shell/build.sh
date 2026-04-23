@@ -60,14 +60,13 @@ echo ">>> BOARD : $BOARD"
 echo ">>> GCC   : $CROSS_COMPILE"
 echo ">>> ARGS  : ${MAKE_ARGS[*]}"
 echo ">>> LOG   : $LOG_FILE"
-echo ""
 
 # ── 切换到工程根目录并执行────────────────────────────────────────────────
 cd "$ROOT_DIR"
-make BOARD="$BOARD" CROSS_COMPILE="$CROSS_COMPILE" "${MAKE_ARGS[@]}" 2>&1 | tee "$LOG_FILE"
-
-echo ""
-echo "===================================================================="
-echo ""
-
-compiledb make BOARD="$BOARD" CROSS_COMPILE="$CROSS_COMPILE" 2>&1 | tee "$LOG_FILE.log"
+if [[ "$LOG_TARGET" != "compiledb" ]]; then
+    echo ">>> Running: make BOARD=\"$BOARD\" CROSS_COMPILE=\"$CROSS_COMPILE\" ${MAKE_ARGS[*]}"
+    make BOARD="$BOARD" CROSS_COMPILE="$CROSS_COMPILE" "${MAKE_ARGS[@]}" 2>&1 | tee "$LOG_FILE"
+else
+    echo ">>> Running: compiledb make BOARD=\"$BOARD\" CROSS_COMPILE=\"$CROSS_COMPILE\""
+    compiledb make BOARD="$BOARD" CROSS_COMPILE="$CROSS_COMPILE" 2>&1 | tee "$LOG_FILE"
+fi

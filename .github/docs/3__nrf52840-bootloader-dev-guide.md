@@ -89,12 +89,13 @@ RTT（Real Time Transfer）是 SEGGER 的专有调试输出技术，通过 SWD �
 nRF52840 RAM
 └── SEGGER RTT ring buffer
       ↑ SEGGER_RTT_Write() 写入
-      ↓ J-Link 通过 SWD 读取
-      ↓ RTT Server 监听 TCP 19021
-      ↓ JLinkRTTClient 显示
+      ↓ J-Link 通过 SWD 读取（JLinkRTTLogger）
+      ↓ 实时写入本地文件
 ```
 
-### 步骤一：查找设备 SEGGER ID
+### 使用方法（单终端，无需 GDB Server）
+
+**步骤一：查找设备 SEGGER ID**
 
 ```bash
 nrfutil device list
@@ -105,45 +106,28 @@ nrfutil device list
 # Traits     jlink, seggerUsb, serialPorts, usb
 ```
 
-### 步骤二：启动 J-Link + RTT Server（终端 1，保持运行）
+**步骤二：启动 JLinkRTTLogger**
 
 ```bash
-JLinkExe \
+JLinkRTTLogger \
   -device NRF52840_XXAA \
   -if SWD \
   -speed 4000 \
-  -autoconnect 1 \
   -SelectEmuBySN <SEGGER_ID> \
-  -RTTTelnetPort 19021
+  -RTTChannel 0 \
+  /tmp/rtt.log
 ```
 
-连接成功后进入 `J-Link>` 交互提示符，保持此终端**不要关闭**。
-
-### 步骤三：连接 RTT 日志查看器（终端 2）
+**步骤三：实时查看日志（另一终端，可选）**
 
 ```bash
-JLinkRTTClient -RTTTelnetPort 19021
+tail -f /tmp/rtt.log
 ```
 
-连接成功后实时显示芯片 RTT 输出，示例：
-```
-###RTT Client: Connected.
-SEGGER J-Link V8.76 - Real time terminal output
-Bootloader Start
-App is valid
-Starting app...
-```
-
-### RTT 工具对比
-
-| 工具 | 功能 | 平台 |
-|------|------|------|
-| `JLinkRTTClient` | 纯文本查看（当前使用） | Linux/macOS/Windows |
-| `JLinkRTTViewerExe` | GUI 查看器，支持多 channel | Linux/Windows |
-| `JLinkRTTLogger` | 将 RTT 输出写入文件 | Linux/Windows |
+> **操作时序**：必须先启动 JLinkRTTLogger，再 Reset 设备。bootloader 运行窗口 < 500 ms，顺序颠倒会错过所有输出。
 
 > **注意**：`DEBUG=1` 编译的 bootloader 使用 `SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL`。
-> 若 RTT Client **未连接**且 buffer 写满，MCU 会卡死等待。
+> 若 RTT Logger **未连接**且 buffer 写满，MCU 会卡死等待。
 > 生产固件必须使用 release 模式（无 RTT）。
 
 ---
