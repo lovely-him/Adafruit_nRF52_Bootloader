@@ -22,8 +22,14 @@ nRF5 SDK 的 armgcc 构建系统需要标准的 `arm-none-eabi-gcc`（工具链�
 推荐使用 xPack 管理工具链，支持多版本共存：
 
 ```bash
+# 安装 nvm 到 bash
+curl -o- <https://...> | bash
+
+# 安装 node
+nvm install --lts
+
 # 安装 xpm（需要 Node.js）
-sudo npm install -g xpm
+npm install -g xpm
 
 # 安装指定版本（nRF5 SDK 17.x 兼容 GCC 10.x / 11.x）
 xpm install -g @xpack-dev-tools/arm-none-eabi-gcc@10.3.1-2.3.1

@@ -9,6 +9,19 @@
 
 ---
 
+## 2026-04-29
+
+### Bug 修复 (Fixes)
+- fix(tools): 修复 build.sh 硬编码 NCS_ENV 路径, 替换为 $ROOT_DIR 相对路径
+
+### 文档更新 (Documentation)
+- docs: 补充 nRF5 SDK Linux 入门文档中 nvm/node 安装步骤, 移除 xpm 安装的 sudo
+
+### 其他变更 (Others)
+- chore: .gitignore 新增 tmp*/ 忽略规则
+
+---
+
 ## 2026-04-22
 
 ### 新功能 (Features)

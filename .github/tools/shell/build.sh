@@ -20,7 +20,7 @@ BOARD="${BOARD:-meshtastic_v1}"
 CROSS_COMPILE="${CROSS_COMPILE:-$HOME/.local/xPacks/@xpack-dev-tools/arm-none-eabi-gcc/10.3.1-2.3.1/.content/bin/arm-none-eabi-}"
 
 # ── 加载 NCS Python 环境 (或 export NCS_ENV_PATH=xxx 覆盖) ─────────────
-NCS_ENV="${NCS_ENV_PATH:-/him/ncs_pro/.github/tmp/ncs_env.sh}"
+NCS_ENV="${NCS_ENV_PATH:-$ROOT_DIR/.github/tmp/ncs_env.sh}"
 source "$NCS_ENV"
 
 set -euo pipefail
@@ -58,6 +58,7 @@ LOG_FILE="$LOG_DIR/${LOG_TARGET}-$(date +%Y%m%d-%H%M%S).log"
 echo ">>> ROOT  : $ROOT_DIR"
 echo ">>> BOARD : $BOARD"
 echo ">>> GCC   : $CROSS_COMPILE"
+echo ">>> NCS   : $NCS_ENV"
 echo ">>> ARGS  : ${MAKE_ARGS[*]}"
 echo ">>> LOG   : $LOG_FILE"
 
