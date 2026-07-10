@@ -1,0 +1,6 @@
+
+# Ignore log files and logs directory
+logs*/
+*.log
+
+tmp*/

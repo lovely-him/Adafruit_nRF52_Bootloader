@@ -69,6 +69,7 @@
 #include "uf2/uf2.h"
 #include "nrf_usbd.h"
 #include "tusb.h"
+  #include "usb/usb_desc.h"
 
 void usb_init(bool cdc_only);
 void usb_teardown(void);
@@ -193,7 +194,7 @@ int main(void) {
   // Return when DFU process is complete (or not entered at all)
   check_dfu_mode();
 
-  // Check if we must reenter the bootloader after reset, instead of 
+  // Check if we must reenter the bootloader after reset, instead of
   // launching the user application
   bool bootloader_must_be_reentered = bootloader_must_reset_to_self();
 
@@ -207,8 +208,8 @@ int main(void) {
    * - sd_softdevice_vector_table_base_set(APP_ADDR)
    * - jump to App reset
    */
-  if (!bootloader_must_be_reentered && 
-       bootloader_app_is_valid() && 
+  if (!bootloader_must_be_reentered &&
+       bootloader_app_is_valid() &&
       !bootloader_dfu_sd_in_progress()) {
     PRINTF("App is valid\r\n");
     if (is_sd_existed()) {
@@ -228,13 +229,13 @@ int main(void) {
   }
 
   // No application was loaded or we need to reenter the bootloader
-  
-  // Reset the system with the OTA DFU update in case we were in it, 
+
+  // Reset the system with the OTA DFU update in case we were in it,
   // to allow completion of FLASHING, otherwise, default to normal reset
   if (_ota_was_connected) {
     NRF_POWER->GPREGRET = DFU_MAGIC_OTA_RESET;
   }
-  
+
   NVIC_SystemReset();
 }
 
@@ -252,11 +253,11 @@ static void check_dfu_mode(void) {
   bool const uf2_dfu         = (gpregret == DFU_MAGIC_UF2_RESET);
   bool const dfu_skip        = (gpregret == DFU_MAGIC_SKIP);
 
-  bool const reason_reset_pin = (NRF_POWER->RESETREAS & POWER_RESETREAS_RESETPIN_Msk) ? true : false;
+  const bool reason_reset_pin = (NRF_POWER->RESETREAS & POWER_RESETREAS_RESETPIN_Msk) ? true : false;
+  const bool dbl_reset_dfu    = ((*dbl_reset_mem) == DFU_DBL_RESET_MAGIC) && reason_reset_pin;
 
   // start either serial, uf2 or ble
-  bool dfu_start = _ota_dfu || serial_only_dfu || uf2_dfu ||
-                   (((*dbl_reset_mem) == DFU_DBL_RESET_MAGIC) && reason_reset_pin);
+  bool dfu_start = _ota_dfu || serial_only_dfu || uf2_dfu || dbl_reset_dfu;
 
   // Clear GPREGRET if it is our values
   if (dfu_start || dfu_skip) {
@@ -271,25 +272,28 @@ static void check_dfu_mode(void) {
   /*------------- Determine DFU mode (Serial, OTA, FRESET or normal) -------------*/
   // DFU button pressed
 #if defined(BUTTON_DFU)
-  dfu_start = dfu_start || button_pressed(BUTTON_DFU);
+  const bool btn_dfu = button_pressed(BUTTON_DFU);
+  dfu_start          = dfu_start || btn_dfu;
+#else
+  const bool btn_dfu = false;
 #endif
 
   // DFU + FRESET are pressed --> OTA
 #if defined(BUTTON_DFU) && defined(BUTTON_DFU_OTA)
-  _ota_dfu = _ota_dfu || (button_pressed(BUTTON_DFU) && button_pressed(BUTTON_DFU_OTA));
+  _ota_dfu = _ota_dfu || (btn_dfu && button_pressed(BUTTON_DFU_OTA));
 #endif
 
-  bool const valid_app = bootloader_app_is_valid();
-  bool const just_start_app = valid_app && !dfu_start && (*dbl_reset_mem) == DFU_DBL_RESET_APP;
+  const bool valid_app      = bootloader_app_is_valid();
+  const bool just_start_app = valid_app && !dfu_start && (*dbl_reset_mem) == DFU_DBL_RESET_APP;
 
   if (!just_start_app && APP_ASKS_FOR_SINGLE_TAP_RESET()) {
     dfu_start = 1;
   }
 
 #ifdef DEFAULT_TO_OTA_DFU
-  // Default to OTA DFU mode, instead of Serial DFU mode, if there is no app present, 
+  // Default to OTA DFU mode, instead of Serial DFU mode, if there is no app present,
   // because otherwise, if there is no application, it will restart in Serial DFU mode,
-  // making it IMPOSSIBLE to recover devices in the field if there are no user 
+  // making it IMPOSSIBLE to recover devices in the field if there are no user
   // accessible USB ports
   if (!valid_app || dfu_start) {
     _ota_dfu = 1;
@@ -330,6 +334,19 @@ static void check_dfu_mode(void) {
       ble_stack_init();
     } else {
       led_state(STATE_USB_UNMOUNTED);
+#ifdef NRF_USBD
+      if (btn_dfu) {
+        usb_desc_set_product_suffix("[BTN]");
+      } else if (serial_only_dfu || uf2_dfu) {
+        usb_desc_set_product_suffix("[APP]");
+      } else if (dbl_reset_dfu) {
+        usb_desc_set_product_suffix("[RST]");
+      } else if (!valid_app) {
+        usb_desc_set_product_suffix("[NOAPP]");
+      } else {
+        usb_desc_set_product_suffix("[UNKNOWN]");
+      }
+#endif
       usb_init(serial_only_dfu);
     }
 
@@ -446,13 +463,13 @@ static uint32_t ble_stack_init(void) {
 
   // Configure SoftDevice PA / LNA assist if required
 #if defined(GPIO_PA_PIN) || defined(GPIO_LNA_PIN)
-  
+
   static const uint32_t gpio_toggle_ch = 0;
   static const uint32_t ppi_set_ch = 0;
   static const uint32_t ppi_clr_ch = 1;
-  
+
   varclr(&opt);
-  
+
   // Common PA / LNA config
   // GPIOTE channel
   opt.common_opt.pa_lna.gpiote_ch_id = gpio_toggle_ch;
@@ -460,7 +477,7 @@ static uint32_t ble_stack_init(void) {
   opt.common_opt.pa_lna.ppi_ch_id_clr = ppi_clr_ch;
   // PPI channel for pin setting
   opt.common_opt.pa_lna.ppi_ch_id_set = ppi_set_ch;
-  
+
 # if defined(GPIO_PA_PIN)
   // -- PA config --
   // Set the pin to be active high
@@ -477,7 +494,7 @@ static uint32_t ble_stack_init(void) {
   opt.common_opt.pa_lna.lna_cfg.active_high = GPIO_LNA_PIN_ACTIVE_STATE;
   // Enable toggling
   opt.common_opt.pa_lna.lna_cfg.enable = 1;
-  
+
   // The GPIO pin to toggle
   opt.common_opt.pa_lna.lna_cfg.gpio_pin = GPIO_LNA_PIN;
   sd_ble_opt_set(BLE_COMMON_OPT_PA_LNA, &opt);
@@ -485,11 +502,11 @@ static uint32_t ble_stack_init(void) {
 
   // Set TX power for scan responses
   sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_SCAN_INIT, 0, RADIO_TXPOWER_TXPOWER_Neg8dBm);
-  
+
   // Set TX power for advertisements
   sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, 0, RADIO_TXPOWER_TXPOWER_Neg8dBm);
   // (Tx power setting for connections inherit the scan or advertising power setting)
-  
+
 #endif
 
   return NRF_SUCCESS;

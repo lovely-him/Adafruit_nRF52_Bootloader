@@ -30,4 +30,8 @@
 
 void usb_desc_init(bool cdc_only);
 
+// Call before usb_init() to append a suffix to the USB product string.
+// e.g. usb_desc_set_product_suffix("[BTN]") → "Meshtastic v1 [BTN]"
+void usb_desc_set_product_suffix(const char *suffix);
+
 #endif /* USB_DESC_H_ */
