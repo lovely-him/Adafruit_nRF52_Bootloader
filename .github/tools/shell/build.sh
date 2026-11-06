@@ -5,93 +5,65 @@
 #   build.sh flash                  — 编译并通过 JLink 烧录
 #   build.sh flash-sd               — 仅烧录 SoftDevice
 #   build.sh clean                  — 清除构建产物
-#   build.sh all DEBUG=1 flash      — debug 模式编译并烧录
-#
-# 脚本原生命令 (@-prefix, 不调用 make):
+#   build.sh compiledb              — 生成 .vscode/compile_commands.json
+#   build.sh all DEBUG=1            — debug 模式编译
 #   build.sh @recover               — 解锁芯片 APPROTECT (nrfjprog --recover)
 #   build.sh @flash <hex>           — 烧录指定 hex (sectorerase, 不重新编译)
-
-# ── 定位工程根目录 (脚本位于 .github/tools/shell/) ───────────────────────
-ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
-
-# ── 板级配置 (修改此处切换目标板, 或 export BOARD=xxx 覆盖) ──────────────
-BOARD="${BOARD:-meshtastic_v1}"
-
-# ── ARM GCC 工具链 (或 export CROSS_COMPILE=xxx 覆盖) ───────────────────
-CROSS_COMPILE="${CROSS_COMPILE:-$HOME/.local/xPacks/@xpack-dev-tools/arm-none-eabi-gcc/10.3.1-2.3.1/.content/bin/arm-none-eabi-}"
-
-# ── 加载 NCS Python 环境 (或 export NCS_ENV_PATH=xxx 覆盖) ─────────────
-NCS_ENV="${NCS_ENV_PATH:-$ROOT_DIR/.github/tmp/ncs_env.sh}"
-source "$NCS_ENV"
-
+#
+# 配置: 板名/工具链/NCS python 全部来自同目录 .env (模板见 .env.example)。
+#       命令行或环境变量优先, 例如 BOARD=feather_nrf52840_express build.sh all
 set -euo pipefail
 
-# ── 脚本原生命令 (@-prefix, 不调用 make) ─────────────────────────────────
-case "${1:-}" in
-  @recover)
+# ── 路径与常量 ───────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
+ENV_FILE="$SCRIPT_DIR/.env"
+LOG_DIR="$ROOT_DIR/.github/logs"
+
+# ── 函数 ─────────────────────────────────────────────────────────────────
+die() {
+    echo "错误: $*" >&2
+    exit 1
+}
+
+load_env() {
+    [[ -f "$ENV_FILE" ]] || die "缺少配置 $ENV_FILE, 请参考 $SCRIPT_DIR/.env.example 创建"
+    . "$ENV_FILE"
+    [[ -n "${BOARD:-}" ]] || die ".env 未设置 BOARD"
+    [[ -n "${CROSS_COMPILE:-}" ]] || die ".env 未设置 CROSS_COMPILE"
+}
+
+new_log() {
+    mkdir -p "$LOG_DIR"
+    echo "$LOG_DIR/$1-$(date +%Y%m%d-%H%M%S).log"
+}
+
+do_recover() {
     echo ">>> Recovering device (ERASEALL via CTRL-AP)..."
     nrfjprog --recover
-    exit 0
-    ;;
-  @flash)
-    HEX="${2:-}"
-    if [[ -z "$HEX" ]]; then
-        echo "错误: 用法: build.sh @flash <hex文件路径>" >&2
-        exit 1
-    fi
-    if [[ ! -f "$HEX" ]]; then
-        echo "错误: 文件不存在: $HEX" >&2
-        exit 1
-    fi
-    echo ">>> Flashing: $HEX"
-    nrfjprog --program "$HEX" --sectorerase --verify --reset
-    exit 0
-    ;;
-esac
+}
 
-# ── 参数直接透传给 make ───────────────────────────────────────────────────
-if [[ $# -eq 0 ]]; then
-    echo "错误: 请指定 make target，例如: build.sh all" >&2
-    exit 1
-fi
-MAKE_ARGS=("$@")
+do_flash() {
+    local hex="${2:-}"
+    [[ -n "$hex" ]] || die "用法: build.sh @flash <hex文件路径>"
+    [[ -f "$hex" ]] || die "文件不存在: $hex"
+    echo ">>> Flashing: $hex"
+    nrfjprog --program "$hex" --sectorerase --verify --reset
+}
 
-# ── 日志文件命名: 取第一个非赋值参数 ────────────────────────────────────
-LOG_TARGET="${1}"
-
-LOG_DIR="$ROOT_DIR/.github/logs"
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/${LOG_TARGET}-$(date +%Y%m%d-%H%M%S).log"
-
-echo ">>> ROOT  : $ROOT_DIR"
-echo ">>> BOARD : $BOARD"
-echo ">>> GCC   : $CROSS_COMPILE"
-echo ">>> NCS   : $NCS_ENV"
-echo ">>> ARGS  : ${MAKE_ARGS[*]}"
-echo ">>> LOG   : $LOG_FILE"
-
-# ── 切换到工程根目录并执行────────────────────────────────────────────────
-cd "$ROOT_DIR"
-if [[ "$LOG_TARGET" != "compiledb" ]]; then
-    echo ">>> Running: make BOARD=\"$BOARD\" CROSS_COMPILE=\"$CROSS_COMPILE\" ${MAKE_ARGS[*]}"
-    make BOARD="$BOARD" CROSS_COMPILE="$CROSS_COMPILE" "${MAKE_ARGS[@]}" 2>&1 | tee "$LOG_FILE"
-else
-    # ── 自动安装 compiledb ────────────────────────────────────────────
-    if ! command -v compiledb &>/dev/null; then
-        echo ">>> compiledb 未找到，正在安装..."
-        pip install compiledb
-    fi
-
-    VSCODE_DIR="$ROOT_DIR/.vscode"
-    mkdir -p "$VSCODE_DIR"
-    COMPILE_COMMANDS="$VSCODE_DIR/compile_commands.json"
-    C_CPP_PROPS="$VSCODE_DIR/c_cpp_properties.json"
-
-    echo ">>> Running: compiledb -o $COMPILE_COMMANDS make BOARD=\"$BOARD\" CROSS_COMPILE=\"$CROSS_COMPILE\""
-    compiledb -o "$COMPILE_COMMANDS" make BOARD="$BOARD" CROSS_COMPILE="$CROSS_COMPILE" 2>&1 | tee "$LOG_FILE"
-
-    # ── 生成/覆盖 c_cpp_properties.json ─────────────────────────────
-    cat > "$C_CPP_PROPS" <<EOF
+do_compiledb() {
+    command -v compiledb >/dev/null || die "未找到 compiledb, 请先安装: pip install compiledb"
+    local vscode_dir="$ROOT_DIR/.vscode"
+    local log_file
+    log_file="$(new_log compiledb)"
+    mkdir -p "$vscode_dir"
+    echo ">>> BOARD : $BOARD"
+    echo ">>> GCC   : $CROSS_COMPILE"
+    echo ">>> LOG   : $log_file"
+    cd "$ROOT_DIR"
+    compiledb -o "$vscode_dir/compile_commands.json" \
+        make BOARD="$BOARD" CROSS_COMPILE="$CROSS_COMPILE" 2>&1 | tee "$log_file"
+    cat > "$vscode_dir/c_cpp_properties.json" <<EOF
 {
   "version": 4,
   "configurations": [
@@ -103,5 +75,51 @@ else
   ]
 }
 EOF
-    echo ">>> Generated: $C_CPP_PROPS"
-fi
+    echo ">>> Generated: $vscode_dir/c_cpp_properties.json"
+}
+
+do_make() {
+    local target="make"
+    for arg in "$@"; do
+        [[ "$arg" == *=* ]] || { target="$arg"; break; }
+    done
+    local log_file
+    log_file="$(new_log "$target")"
+    echo ">>> ROOT  : $ROOT_DIR"
+    echo ">>> BOARD : $BOARD"
+    echo ">>> GCC   : $CROSS_COMPILE"
+    echo ">>> ARGS  : $*"
+    echo ">>> LOG   : $log_file"
+    cd "$ROOT_DIR"
+    make BOARD="$BOARD" CROSS_COMPILE="$CROSS_COMPILE" "$@" 2>&1 | tee "$log_file"
+}
+
+# ── main ─────────────────────────────────────────────────────────────────
+main() {
+    case "${1:-}" in
+        "")
+            die "请指定 make target, 例如: build.sh all"
+            ;;
+        @recover)
+            do_recover
+            return 0
+            ;;
+        @flash)
+            do_flash "$@"
+            return 0
+            ;;
+        @*)
+            die "未知命令: $1"
+            ;;
+    esac
+
+    load_env
+
+    if [[ "$1" == compiledb ]]; then
+        do_compiledb
+    else
+        do_make "$@"
+    fi
+}
+
+main "$@"

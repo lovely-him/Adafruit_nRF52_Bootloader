@@ -22,8 +22,8 @@
  * THE SOFTWARE.
  */
 
-#ifndef _MESHTASTIC_V1_H
-#define _MESHTASTIC_V1_H
+#ifndef _NODARA_H
+#define _NODARA_H
 
 /*------------------------------------------------------------------*/
 /* LED
@@ -79,4 +79,4 @@
 #define UF2_BOARD_ID      "Nodara"
 #define UF2_INDEX_URL     "https://github.com/adafruit/Adafruit_nRF52_Bootloader"
 
-#endif // _MESHTASTIC_V1_H
+#endif // _NODARA_H
