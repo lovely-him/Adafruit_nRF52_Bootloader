@@ -41,6 +41,22 @@ static bool _cdc_only = false;
 // Serial is 64-bit DeviceID -> 16 chars len
 static char desc_str_serial[1+16];
 
+// Product string: base model name + optional suffix set before usb_init()
+static char desc_str_product[64] = BLEDIS_MODEL;
+
+void usb_desc_set_product_suffix(const char *suffix) {
+  size_t base_len   = strlen(BLEDIS_MODEL);
+  size_t suffix_len = strlen(suffix);
+  // space + suffix must fit within buffer (reserve 1 for null terminator)
+  if (base_len + 1 + suffix_len >= sizeof(desc_str_product)) {
+    suffix_len = sizeof(desc_str_product) - base_len - 2;
+  }
+  memcpy(desc_str_product, BLEDIS_MODEL, base_len);
+  desc_str_product[base_len] = ' ';
+  memcpy(desc_str_product + base_len + 1, suffix, suffix_len);
+  desc_str_product[base_len + 1 + suffix_len] = '\0';
+}
+
 //--------------------------------------------------------------------+
 // Device Descriptor
 //--------------------------------------------------------------------+
@@ -158,15 +174,14 @@ void usb_desc_init(bool cdc_only)
 //--------------------------------------------------------------------+
 
 // array of pointer to string descriptors
-char const* string_desc_arr [] =
-{
-  (const char[]) { 0x09, 0x04 }, // 0: is supported language is English (0x0409)
-  BLEDIS_MANUFACTURER,           // 1: Manufacturer
-  BLEDIS_MODEL,                  // 2: Product
-  desc_str_serial,               // 3: Serials, should use chip ID
-  "nRF Serial",                  // 4: CDC Interface
+const char *string_desc_arr[] = {
+  (const char[]){0x09, 0x04}, // 0: is supported language is English (0x0409)
+  BLEDIS_MANUFACTURER,        // 1: Manufacturer
+  desc_str_product,           // 2: Product (dynamic, set via usb_desc_set_product_suffix)
+  desc_str_serial,            // 3: Serials, should use chip ID
+  "nRF Serial",               // 4: CDC Interface
 #if CFG_TUD_MSC
-  "nRF UF2",                     // 5: MSC Interface
+  "nRF UF2",                  // 5: MSC Interface
 #endif
 };
 

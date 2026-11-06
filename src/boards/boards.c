@@ -310,6 +310,26 @@ void board_display_draw_line(uint16_t y, uint8_t const* buf, size_t nbytes) {
 //--------------------------------------------------------------------+
 // LED Indicator
 //--------------------------------------------------------------------+
+
+// Breathing period in milliseconds: one full bright<->dim cycle.
+// Smaller value = faster breathing. Can be overridden in board.h (or
+// via build flags) to tune the LED timing for a specific board.
+#ifndef LED_BREATH_PERIOD_STARTED
+#define LED_BREATH_PERIOD_STARTED   300   // bootloader entered but USB not enumerated
+#endif
+#ifndef LED_BREATH_PERIOD_MOUNTED
+#define LED_BREATH_PERIOD_MOUNTED   3000  // USB enumerated, waiting for update
+#endif
+#ifndef LED_BREATH_PERIOD_WRITING
+#define LED_BREATH_PERIOD_WRITING   100   // firmware is being written
+#endif
+#ifndef LED_BREATH_PERIOD_IDLE
+#define LED_BREATH_PERIOD_IDLE      3000  // writing finished / BLE connected
+#endif
+#ifndef LED_BREATH_PERIOD_ALERT
+#define LED_BREATH_PERIOD_ALERT     300   // BLE disconnected
+#endif
+
 void pwm_teardown(NRF_PWM_Type* pwm) {
   pwm->TASKS_SEQSTART[0] = 0;
   pwm->ENABLE = 0;
@@ -413,40 +433,40 @@ void led_state(uint32_t state) {
   switch (state) {
     case STATE_USB_MOUNTED:
       new_rgb_color = 0x00ff00;
-      primary_cycle_length = 3000;
+      primary_cycle_length = LED_BREATH_PERIOD_MOUNTED;
       break;
 
     case STATE_BOOTLOADER_STARTED:
     case STATE_USB_UNMOUNTED:
       new_rgb_color = 0xff0000;
-      primary_cycle_length = 300;
+      primary_cycle_length = LED_BREATH_PERIOD_STARTED;
       break;
 
     case STATE_WRITING_STARTED:
       temp_color = 0xff0000;
-      primary_cycle_length = 100;
+      primary_cycle_length = LED_BREATH_PERIOD_WRITING;
       break;
 
     case STATE_WRITING_FINISHED:
       // Empty means to unset any temp colors.
-      primary_cycle_length = 3000;
+      primary_cycle_length = LED_BREATH_PERIOD_IDLE;
       break;
 
     case STATE_BLE_CONNECTED:
       new_rgb_color = 0x0000ff;
       #ifdef LED_SECONDARY_PIN
-      secondary_cycle_length = 3000;
+      secondary_cycle_length = LED_BREATH_PERIOD_IDLE;
       #else
-      primary_cycle_length = 3000;
+      primary_cycle_length = LED_BREATH_PERIOD_IDLE;
       #endif
       break;
 
     case STATE_BLE_DISCONNECTED:
       new_rgb_color = 0xff00ff;
       #ifdef LED_SECONDARY_PIN
-      secondary_cycle_length = 300;
+      secondary_cycle_length = LED_BREATH_PERIOD_ALERT;
       #else
-      primary_cycle_length = 300;
+      primary_cycle_length = LED_BREATH_PERIOD_ALERT;
       #endif
       break;
 
